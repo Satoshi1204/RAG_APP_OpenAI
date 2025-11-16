@@ -8,6 +8,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI # ← OpenAI に変更
+from janome.tokenizer import Tokenizer # ← この1行を追加
+from janome.analyzer import Analyzer  # ← この1行を追加
+from janome.tokenfilter import POSStopFilter # ← この1行を追加
 
 
 # .envファイルをロードして環境変数を設定
@@ -43,20 +46,49 @@ def load_data(csv_file_path):
     except Exception as e:
         st.error(f"データの読み込み中に予期せぬエラーが発生しました: {e}")
         st.stop()
+        
+# Janome（形態素解析）の準備
+# Analyzer をグローバルに初期化（キャッシュで高速化）
+@st.cache_resource
+def get_janome_analyzer():
+    # 「の」「は」「です」などの助詞・助動詞を除外するフィルタ
+    token_filters = [POSStopFilter(['助詞', '助動詞', '記号'])]
+    return Analyzer(token_filters=token_filters)
+
+analyzer = get_janome_analyzer()
+
+def tokenize_japanese(text):
+    """
+    Janomeを使って日本語のテキストを単語（名詞、動詞、形容詞など）に分割し、
+    スペースで区切った文字列（わかち書き）を返す。
+    """
+    # analyzer.analyze(text) は Token オブジェクトのリストを返す
+    # token.surface は元の単語（例：「田島」）
+    tokens = [token.surface for token in analyzer.analyze(text)]
+    return " ".join(tokens)
 
 # TF-IDFモデルを構築する関数
 @st.cache_resource
 def build_tfidf_model(texts):
     """
     与えられたテキストのリストからTF-IDFベクトルライザとTF-IDF行列を構築する。
+    （Janomeによる日本語形態素解析を実行）
     """
     st.write("TF-IDFモデルを構築中...") # 動作確認用
+    
+    # 1. Janomeで全テキストを「わかち書き」に変換
+    st.write("日本語の形態素解析（わかち書き）を実行中...")
+    tokenized_texts = [tokenize_japanese(text) for text in texts]
+    st.write("形態素解析完了。")
+
+    # 2. わかち書きされたテキストを TfidfVectorizer に渡す
     vectorizer = TfidfVectorizer(
-        max_features=5000,  # 語彙数を5000に制限（メモリと速度のため）
-        max_df=0.95,        # 95%以上の文書に出現する単語は無視
-        min_df=2            # 2回未満しか出現しない単語は無視
+        max_features=5000,
+        max_df=0.95,
+        min_df=2
     )
-    tfidf_matrix = vectorizer.fit_transform(texts)
+    tfidf_matrix = vectorizer.fit_transform(tokenized_texts) # ← 日本語対応済みのテキストで処理
+    
     st.write("TF-IDFモデル構築完了。") # 動作確認用
     return tfidf_matrix, vectorizer
 
