@@ -183,7 +183,7 @@ def respond_with_openai(query, client, results, texts, top_n=3):
     # 4. OpenAI APIを呼び出して回答を生成
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # または "gpt-4o" など、利用可能なモデル
+            model="gpt-4o",  # または "gpt-3.5-turbo" など、利用可能なモデル
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
